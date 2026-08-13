@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Dices, 
   Trash2, 
@@ -52,6 +52,10 @@ export default function App() {
   const [isGridShuffled, setIsGridShuffled] = useState(false);
   const [availableSpecials, setAvailableSpecials] = useState<number[]>([4, 8, 34, 50, 60, 89]);
   const [hasFilledSix, setHasFilledSix] = useState(false);
+  const [isSpecialMode, setIsSpecialMode] = useState(false);
+
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressTriggeredRef = useRef<boolean>(false);
 
   const [isChecking, setIsChecking] = useState(false);
   const [checkingStep, setCheckingStep] = useState<string>("");
@@ -118,83 +122,93 @@ export default function App() {
     return score;
   };
 
-  // Shuffle grid numbers 1-90, excluding specials, incorporating duplicates in distant configurations
+  // Shuffle grid numbers 1-90
   const handleShuffleGrid = () => {
     if (isGenerating) return;
     playPopSound(550, 0.15);
     
-    // Specials to exclude, duplicates to place twice
-    const specials = [34, 60, 89, 50, 4, 8];
-    const duplicates = [13, 28, 39, 43, 58, 63];
+    if (isSpecialMode) {
+      // Special Mode: Specials to exclude, duplicates to place twice
+      const specials = [34, 60, 89, 50, 4, 8];
+      const duplicates = [13, 28, 39, 43, 58, 63];
 
-    // Filter out standard 78 numbers (neither special nor duplicate)
-    const remaining: number[] = [];
-    for (let i = 1; i <= 90; i++) {
-      if (!specials.includes(i) && !duplicates.includes(i)) {
-        remaining.push(i);
-      }
-    }
-
-    // Shuffle the remaining 78 numbers
-    for (let i = remaining.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
-    }
-
-    // Prepare grid of size 90 filled with null placeholders
-    const arr: (number | null)[] = new Array(90).fill(null);
-
-    // Guaranteed random separation pairs for duplicates
-    // None share column, row, or table section (upper vs lower)
-    const usedIndices = new Set<number>();
-    const duplicatePairs: { value: number; idx1: number; idx2: number }[] = [];
-
-    for (const val of duplicates) {
-      let found = false;
-      let attempts = 0;
-      while (!found && attempts < 1000) {
-        attempts++;
-        // idx1 in upper section (0 to 49)
-        const idx1 = Math.floor(Math.random() * 50);
-        // idx2 in lower section (50 to 89)
-        const idx2 = 50 + Math.floor(Math.random() * 40);
-
-        if (usedIndices.has(idx1) || usedIndices.has(idx2)) continue;
-
-        const col1 = idx1 % 10;
-        const col2 = idx2 % 10;
-        const row1 = Math.floor(idx1 / 10);
-        const row2 = Math.floor(idx2 / 10);
-
-        // Constraint: not on same row, not on same col, and they are in different sections (idx1 <= 49, idx2 >= 50)
-        if (col1 !== col2 && row1 !== row2) {
-          usedIndices.add(idx1);
-          usedIndices.add(idx2);
-          duplicatePairs.push({ value: val, idx1, idx2 });
-          found = true;
+      // Filter out standard 78 numbers (neither special nor duplicate)
+      const remaining: number[] = [];
+      for (let i = 1; i <= 90; i++) {
+        if (!specials.includes(i) && !duplicates.includes(i)) {
+          remaining.push(i);
         }
       }
-    }
 
-    duplicatePairs.forEach(pair => {
-      arr[pair.idx1] = pair.value;
-      arr[pair.idx2] = pair.value;
-    });
-
-    // Populate remaining cells in grid
-    let remainingIdx = 0;
-    for (let i = 0; i < 90; i++) {
-      if (arr[i] === null) {
-        arr[i] = remaining[remainingIdx++];
+      // Shuffle the remaining 78 numbers
+      for (let i = remaining.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
       }
-    }
 
-    setGridNumbers(arr as number[]);
-    setIsGridShuffled(true);
-    setAvailableSpecials([4, 8, 34, 50, 60, 89]);
-    setSelectedNumbers([]); // clear any old select
-    setSelectedGridIndices([]);
-    setHasFilledSix(false);
+      // Prepare grid of size 90 filled with null placeholders
+      const arr: (number | null)[] = new Array(90).fill(null);
+
+      // Guaranteed random separation pairs for duplicates
+      const usedIndices = new Set<number>();
+      const duplicatePairs: { value: number; idx1: number; idx2: number }[] = [];
+
+      for (const val of duplicates) {
+        let found = false;
+        let attempts = 0;
+        while (!found && attempts < 1000) {
+          attempts++;
+          const idx1 = Math.floor(Math.random() * 50);
+          const idx2 = 50 + Math.floor(Math.random() * 40);
+
+          if (usedIndices.has(idx1) || usedIndices.has(idx2)) continue;
+
+          const col1 = idx1 % 10;
+          const col2 = idx2 % 10;
+          const row1 = Math.floor(idx1 / 10);
+          const row2 = Math.floor(idx2 / 10);
+
+          if (col1 !== col2 && row1 !== row2) {
+            usedIndices.add(idx1);
+            usedIndices.add(idx2);
+            duplicatePairs.push({ value: val, idx1, idx2 });
+            found = true;
+          }
+        }
+      }
+
+      duplicatePairs.forEach(pair => {
+        arr[pair.idx1] = pair.value;
+        arr[pair.idx2] = pair.value;
+      });
+
+      // Populate remaining cells in grid
+      let remainingIdx = 0;
+      for (let i = 0; i < 90; i++) {
+        if (arr[i] === null) {
+          arr[i] = remaining[remainingIdx++];
+        }
+      }
+
+      setGridNumbers(arr as number[]);
+      setIsGridShuffled(true);
+      setAvailableSpecials([4, 8, 34, 50, 60, 89]);
+      setSelectedNumbers([]);
+      setSelectedGridIndices([]);
+      setHasFilledSix(false);
+    } else {
+      // Normal Mode: Pure random shuffle of numbers 1-90 without duplicates or special logic
+      const arr = Array.from({ length: 90 }, (_, i) => i + 1);
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      setGridNumbers(arr);
+      setIsGridShuffled(true);
+      setSelectedNumbers([]);
+      setSelectedGridIndices([]);
+      setHasFilledSix(false);
+    }
   };
 
   // Toggle selected numbers
@@ -218,7 +232,7 @@ export default function App() {
     const specialList = [4, 8, 34, 50, 60, 89];
     const duplicateList = [13, 28, 39, 43, 58, 63];
 
-    if (isGridShuffled && !hasFilledSix) {
+    if (isGridShuffled && isSpecialMode && !hasFilledSix) {
       let finalNum = num;
 
       if (duplicateList.includes(num)) {
@@ -273,18 +287,20 @@ export default function App() {
         const next = [...prev, finalNum];
         if (next.length === 6) {
           setHasFilledSix(true);
+          setIsSpecialMode(false); // Automatically exit Special Mode when 6 numbers chosen
         }
         return next;
       });
       setSelectedGridIndices(prev => [...prev, indexInGrid]);
     } else {
-      // Standard click when grid is sequential or when selection has reached 6 once
+      // Standard click when not in Special Mode or when grid is sequential
       triggerHaptic(15);
       playPopSound(440 + selectedNumbers.length * 80, 0.12);
       setSelectedNumbers(prev => {
         const next = [...prev, num];
         if (next.length === 6) {
           setHasFilledSix(true);
+          setIsSpecialMode(false);
         }
         return next;
       });
@@ -327,6 +343,37 @@ export default function App() {
     setCheckResult(null);
     setCheckingProgress(0);
     setHasFilledSix(false);
+    setIsSpecialMode(false);
+  };
+
+  // Handlers for press and hold (0.5s) on Ripristina button to enter Special Mode
+  const startRipristinaPress = () => {
+    isLongPressTriggeredRef.current = false;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressTriggeredRef.current = true;
+      handleClearSelection();
+      setIsSpecialMode(true);
+      triggerHaptic(50);
+    }, 500);
+  };
+
+  const cancelRipristinaPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleRipristinaClick = (e: React.MouseEvent | React.TouchEvent) => {
+    if (isLongPressTriggeredRef.current) {
+      isLongPressTriggeredRef.current = false;
+      e.preventDefault();
+      return;
+    }
+    cancelRipristinaPress();
+    handleClearSelection();
   };
 
   // Cascading automatic generation
@@ -643,10 +690,13 @@ export default function App() {
             {/* Menu Hamburger */}
             <div className="flex items-center gap-2">
               <button
-                className="p-2 rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/15 transition-colors cursor-pointer"
+                className="relative p-2 rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/15 transition-colors cursor-pointer"
                 title="Menu"
               >
                 <Menu size={18} />
+                {isSpecialMode && (
+                  <span className="absolute top-1 right-1 w-[2px] h-[2px] bg-white rounded-full pointer-events-none" />
+                )}
               </button>
             </div>
           </div>
@@ -681,9 +731,15 @@ export default function App() {
             </button>
             
             <button
-              onClick={handleClearSelection}
+              onMouseDown={startRipristinaPress}
+              onMouseUp={handleRipristinaClick}
+              onMouseLeave={cancelRipristinaPress}
+              onTouchStart={startRipristinaPress}
+              onTouchEnd={handleRipristinaClick}
+              onTouchCancel={cancelRipristinaPress}
+              onClick={handleRipristinaClick}
               disabled={(!isGridShuffled && selectedNumbers.length === 0) || isGenerating}
-              className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all border cursor-pointer ${
+              className={`flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all border cursor-pointer select-none ${
                 ((!isGridShuffled && selectedNumbers.length === 0) || isGenerating)
                   ? "bg-white/5 text-white/20 border-white/5 cursor-not-allowed"
                   : "bg-white/10 text-white hover:bg-white/20 active:scale-95 border-white/20 shadow-md"
@@ -838,7 +894,7 @@ export default function App() {
                   <div className="grid grid-cols-3 gap-1.5 text-center">
                     <div className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
                       <span className="block text-[10px] text-black font-extrabold uppercase leading-tight">PAGATO</span>
-                      <span className="text-xs sm:text-sm font-black text-black whitespace-nowrap tracking-tight leading-tight">{formatCurrency(checkResult.spent, false)} €</span>
+                      <span className="text-xs sm:text-sm font-black text-red-600 whitespace-nowrap tracking-tight leading-tight">-{formatCurrency(checkResult.spent, false)} €</span>
                     </div>
                     
                     <div className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
@@ -994,9 +1050,48 @@ export default function App() {
           </div>
         </section>
 
-        {/* Small Subtle Copyright/Tech Note footer */}
-        <footer className="bg-transparent px-4 py-2 border-t border-white/10 text-center text-[11px] text-white/40 select-none">
-          Ottimizzato per browser mobile Android & iOS. Salva localmente senza database.
+        {/* Real Portal Footer Section */}
+        <footer className="bg-slate-950/80 border-t border-white/10 px-5 py-6 text-white/60 text-xs flex flex-col gap-5 select-none">
+          {/* Social Media Links */}
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">Seguici sui Social</span>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-white/80">
+              <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-pink-400 transition-colors text-xs font-medium">Facebook</a>
+              <span className="text-white/20">•</span>
+              <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-pink-400 transition-colors text-xs font-medium">Instagram</a>
+              <span className="text-white/20">•</span>
+              <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-pink-400 transition-colors text-xs font-medium">X (Twitter)</a>
+              <span className="text-white/20">•</span>
+              <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-pink-400 transition-colors text-xs font-medium">Telegram</a>
+              <span className="text-white/20">•</span>
+              <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-pink-400 transition-colors text-xs font-medium">YouTube</a>
+            </div>
+          </div>
+
+          {/* Navigation & Legal Links */}
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[11px] text-white/70 font-medium border-t border-b border-white/10 py-3">
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">Chi Siamo</a>
+            <span className="text-white/20">•</span>
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">Contatti</a>
+            <span className="text-white/20">•</span>
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">Tutela Privacy</a>
+            <span className="text-white/20">•</span>
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">Termini e Condizioni</a>
+            <span className="text-white/20">•</span>
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">Cookie Policy</a>
+            <span className="text-white/20">•</span>
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">Gioco Responsabile</a>
+          </div>
+
+          {/* Legal Disclaimer & Copyright */}
+          <div className="text-center space-y-2 text-[10px] text-white/40 leading-relaxed">
+            <p>
+              Il gioco è vietato ai minori e può causare dipendenza patologica. Consulta le probabilità di vincita su www.adm.gov.it.
+            </p>
+            <p>
+              © 2026 SuperEnalotto.net - Tutti i diritti riservati. Marchi e loghi appartengono ai rispettivi proprietari.
+            </p>
+          </div>
         </footer>
 
       </div>
