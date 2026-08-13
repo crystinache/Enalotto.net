@@ -300,7 +300,6 @@ export default function App() {
         const next = [...prev, num];
         if (next.length === 6) {
           setHasFilledSix(true);
-          setIsSpecialMode(false);
         }
         return next;
       });
@@ -343,7 +342,6 @@ export default function App() {
     setCheckResult(null);
     setCheckingProgress(0);
     setHasFilledSix(false);
-    setIsSpecialMode(false);
   };
 
   // Handlers for press and hold (0.5s) on Ripristina button to enter Special Mode
