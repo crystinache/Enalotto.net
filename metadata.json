@@ -1,0 +1,6 @@
+{
+  "name": "Selettore Numeri 1-90",
+  "description": "Un'applicazione web ottimizzata per dispositivi mobili per selezionare e visualizzare 6 numeri da una tabella di 90 numeri.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
