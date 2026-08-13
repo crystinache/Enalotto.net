@@ -69,13 +69,21 @@ export default function App() {
   const [isVincitePressed, setIsVincitePressed] = useState<boolean>(false);
 
   const getZodiacSign = (n1: number, n2: number): string => {
-    const signs = [
-      "Ariete", "Toro", "Gemelli", "Cancro",
-      "Leone", "Vergine", "Bilancia", "Scorpione",
-      "Sagittario", "Capricorno", "Acquario", "Pesci"
-    ];
-    const idx = Math.abs(n1 + n2 + 4) % 12;
-    return signs[idx];
+    const day = ((Math.abs(n1) - 1) % 31) + 1;
+    const month = ((Math.abs(n2) - 1) % 12) + 1;
+
+    if ((month === 3 && day >= 21) || (month === 4 && day <= 20)) return "Ariete";
+    if ((month === 4 && day >= 21) || (month === 5 && day <= 20)) return "Toro";
+    if ((month === 5 && day >= 21) || (month === 6 && day <= 20)) return "Gemelli";
+    if ((month === 6 && day >= 21) || (month === 7 && day <= 22)) return "Cancro";
+    if ((month === 7 && day >= 23) || (month === 8 && day <= 22)) return "Leone";
+    if ((month === 8 && day >= 23) || (month === 9 && day <= 22)) return "Vergine";
+    if ((month === 9 && day >= 23) || (month === 10 && day <= 22)) return "Bilancia";
+    if ((month === 10 && day >= 23) || (month === 11 && day <= 21)) return "Scorpione";
+    if ((month === 11 && day >= 22) || (month === 12 && day <= 21)) return "Sagittario";
+    if ((month === 12 && day >= 22) || (month === 1 && day <= 19)) return "Capricorno";
+    if ((month === 1 && day >= 20) || (month === 2 && day <= 18)) return "Acquario";
+    return "Pesci";
   };
 
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -546,11 +554,11 @@ export default function App() {
 
       let prize = 0;
       if (points === 2) {
-        prize = Math.round((Math.random() * 7 + 5) * 100) / 100;
+        prize = Math.round((Math.random() * 6 + 4) * 100) / 100; // 4 to 10 €
       } else if (points === 3) {
-        prize = Math.round((Math.random() * 25 + 20) * 100) / 100;
+        prize = Math.round((Math.random() * 30 + 20) * 100) / 100; // 20 to 50 €
       } else if (points === 4) {
-        prize = Math.round((Math.random() * 350 + 200) * 100) / 100;
+        prize = Math.round((Math.random() * 200 + 300) * 100) / 100; // 300 to 500 €
       } else if (points === 5) {
         prize = Math.round((Math.random() * 15000 + 10000) * 100) / 100;
       } else if (points === 6) {
@@ -741,9 +749,11 @@ export default function App() {
               net = winnings - spent;
             }
 
-            const twoHits = Math.floor(Math.random() * 40) + 70; // 70-110 times
-            const threeHits = Math.floor(Math.random() * 10) + 8; // 8-18 times
-            const fourHits = Math.floor(Math.random() * 2) + 1; // 1-2 times
+            const fourHits = winnings >= 350 ? Math.min(Math.floor(winnings / 350), Math.max(1, Math.floor(winnings / 400))) + (Math.random() < 0.3 ? 1 : 0) : (Math.random() < 0.25 ? 1 : 0);
+            const rem1 = Math.max(0, winnings - (fourHits * 400));
+            const threeHits = rem1 >= 25 ? Math.min(Math.floor(rem1 / 35), Math.floor(Math.random() * 8) + 3) : (Math.random() < 0.5 ? 2 : 1);
+            const rem2 = Math.max(0, rem1 - (threeHits * 35));
+            const twoHits = Math.max(15, Math.round(rem2 / 7)) + Math.floor(Math.random() * 25);
             const fiveHits = 0; // Always 0
             const sixHits = 0; // Always 0
 
@@ -1191,7 +1201,7 @@ export default function App() {
         </main>
 
         {/* Bottom Verify Action Panel */}
-        <section className="bg-white/5 backdrop-blur-2xl border-t border-white/15 px-4 py-4 z-10">
+        <section className="bg-emerald-900 backdrop-blur-2xl border-t border-emerald-700 px-4 py-4 z-10 shadow-2xl">
           <div className="flex gap-2.5">
             <button
               onClick={handleCheckNumbers}
@@ -1199,7 +1209,7 @@ export default function App() {
               className={`w-full py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 text-sm font-extrabold tracking-wide transition-all duration-150 shadow-lg cursor-pointer ${
                 selectedNumbers.length === 6 && !isGenerating && !isChecking
                   ? "bg-gradient-to-r from-pink-500 to-indigo-500 hover:from-pink-600 hover:to-indigo-600 text-white shadow-pink-500/20 active:scale-95"
-                  : "bg-white/5 text-white/20 border border-white/10 cursor-not-allowed shadow-none"
+                  : "bg-white/15 text-white/75 border border-white/25 cursor-not-allowed shadow-none"
               }`}
             >
               <Search size={15} className={isChecking ? "animate-spin" : ""} />
