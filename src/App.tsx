@@ -524,21 +524,37 @@ export default function App() {
     points: number,
     countNeeded: number,
     currentCount: number,
-    userSelected: number[]
+    userSelected: number[],
+    totalWinnings: number = 0
   ): CategoryDraw[] => {
     if (points > 6 || countNeeded <= 0) return [];
 
     const newDraws: CategoryDraw[] = [];
     let baseExtraction = Math.max(1, 2500 - currentCount * 22);
+    let count2026 = 0;
 
     for (let i = 0; i < countNeeded; i++) {
       const extNum = Math.max(1, baseExtraction - (i * Math.floor(Math.random() * 12 + 8)) - Math.floor(Math.random() * 4));
       baseExtraction = extNum;
 
-      // Date estimation descending
-      const year = Math.max(2011, Math.min(2026, 2026 - Math.floor((2513 - extNum) / 167)));
-      const month = Math.floor(Math.random() * 12) + 1;
-      const day = Math.floor(Math.random() * 28) + 1;
+      // Most draws in previous years (2011-2025). At most 2 draws in 2026.
+      let year = Math.floor(Math.random() * (2025 - 2011 + 1)) + 2011;
+      if (Math.random() < 0.08 && count2026 < 2) {
+        year = 2026;
+        count2026++;
+      }
+
+      let month = Math.floor(Math.random() * 12) + 1;
+      let day = Math.floor(Math.random() * 28) + 1;
+
+      if (year === 2026) {
+        // Current date: August 13, 2026. Must not be in the future.
+        month = Math.min(8, month);
+        if (month === 8) {
+          day = Math.min(13, day);
+        }
+      }
+
       const dateStr = `${day.toString().padStart(2, "0")}/${month.toString().padStart(2, "0")}/${year}`;
 
       // Matched numbers
@@ -556,9 +572,15 @@ export default function App() {
       if (points === 2) {
         prize = Math.round((Math.random() * 6 + 4) * 100) / 100; // 4 to 10 €
       } else if (points === 3) {
-        prize = Math.round((Math.random() * 30 + 20) * 100) / 100; // 20 to 50 €
+        // 20 to 100 €; if winnings > 3000, closer to max (70 to 100 €)
+        const minP = totalWinnings > 3000 ? 70 : 20;
+        const rangeP = totalWinnings > 3000 ? 30 : 80;
+        prize = Math.round((Math.random() * rangeP + minP) * 100) / 100;
       } else if (points === 4) {
-        prize = Math.round((Math.random() * 200 + 300) * 100) / 100; // 300 to 500 €
+        // 300 to 800 €; if winnings > 3000, closer to max (650 to 800 €)
+        const minP = totalWinnings > 3000 ? 650 : 300;
+        const rangeP = totalWinnings > 3000 ? 150 : 500;
+        prize = Math.round((Math.random() * rangeP + minP) * 100) / 100;
       } else if (points === 5) {
         prize = Math.round((Math.random() * 15000 + 10000) * 100) / 100;
       } else if (points === 6) {
@@ -573,6 +595,16 @@ export default function App() {
         prize
       });
     }
+
+    // Sort draws in descending chronological order (most recent first)
+    newDraws.sort((a, b) => {
+      const [da, ma, ya] = a.dateStr.split('/').map(Number);
+      const [db, mb, yb] = b.dateStr.split('/').map(Number);
+      const timeA = new Date(ya, ma - 1, da).getTime();
+      const timeB = new Date(yb, mb - 1, db).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return b.extractionNum - a.extractionNum;
+    });
 
     return newDraws;
   };
@@ -600,7 +632,7 @@ export default function App() {
       const hitsCount = getCategoryHitsCount(points);
       if (hitsCount > 0) {
         const countToFetch = Math.min(5, hitsCount);
-        const initialDraws = generateDrawsForCategory(points, countToFetch, 0, selectedNumbers);
+        const initialDraws = generateDrawsForCategory(points, countToFetch, 0, selectedNumbers, checkResult?.winnings || 0);
         setCategoryDraws(prev => ({ ...prev, [points]: initialDraws }));
       } else {
         setCategoryDraws(prev => ({ ...prev, [points]: [] }));
@@ -615,10 +647,19 @@ export default function App() {
     if (remaining <= 0) return;
 
     const countToFetch = Math.min(5, remaining);
-    const additional = generateDrawsForCategory(points, countToFetch, currentDraws.length, selectedNumbers);
+    const additional = generateDrawsForCategory(points, countToFetch, currentDraws.length, selectedNumbers, checkResult?.winnings || 0);
+    const combined = [...currentDraws, ...additional].sort((a, b) => {
+      const [da, ma, ya] = a.dateStr.split('/').map(Number);
+      const [db, mb, yb] = b.dateStr.split('/').map(Number);
+      const timeA = new Date(ya, ma - 1, da).getTime();
+      const timeB = new Date(yb, mb - 1, db).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return b.extractionNum - a.extractionNum;
+    });
+
     setCategoryDraws(prev => ({
       ...prev,
-      [points]: [...currentDraws, ...additional]
+      [points]: combined
     }));
   };
 
@@ -749,11 +790,37 @@ export default function App() {
               net = winnings - spent;
             }
 
-            const fourHits = winnings >= 350 ? Math.min(Math.floor(winnings / 350), Math.max(1, Math.floor(winnings / 400))) + (Math.random() < 0.3 ? 1 : 0) : (Math.random() < 0.25 ? 1 : 0);
-            const rem1 = Math.max(0, winnings - (fourHits * 400));
-            const threeHits = rem1 >= 25 ? Math.min(Math.floor(rem1 / 35), Math.floor(Math.random() * 8) + 3) : (Math.random() < 0.5 ? 2 : 1);
-            const rem2 = Math.max(0, rem1 - (threeHits * 35));
-            const twoHits = Math.max(15, Math.round(rem2 / 7)) + Math.floor(Math.random() * 25);
+            let fourHits = 0;
+            let threeHits = 0;
+            let twoHits = 0;
+
+            if (winnings > 3000) {
+              fourHits = Math.floor(winnings / 550) + Math.floor(Math.random() * 5) + 1;
+              fourHits = Math.min(35, fourHits);
+
+              const rem1 = Math.max(0, winnings - (fourHits * 720));
+              threeHits = fourHits + Math.floor(rem1 / 85) + Math.floor(Math.random() * 10) + 3;
+
+              const rem2 = Math.max(0, rem1 - (threeHits * 90));
+              twoHits = threeHits + Math.floor(rem2 / 7) + Math.floor(Math.random() * 15) + 5;
+            } else if (winnings > 300) {
+              fourHits = Math.min(20, Math.floor(winnings / 450) + (Math.random() < 0.2 ? 1 : 0));
+              threeHits = Math.max(fourHits, Math.floor(winnings / 50) + Math.floor(Math.random() * 8) + 3);
+              twoHits = Math.max(threeHits + 2, Math.floor(winnings / 7) + Math.floor(Math.random() * 30) + 15);
+            } else if (winnings > 150) {
+              fourHits = Math.random() < 0.4 ? 1 : 0;
+              threeHits = Math.max(fourHits, Math.floor(winnings / 40) + Math.floor(Math.random() * 6) + 2);
+              twoHits = Math.max(threeHits + 2, Math.floor(winnings / 6) + Math.floor(Math.random() * 20) + 10);
+            } else {
+              fourHits = 0;
+              threeHits = winnings > 25 ? Math.floor(winnings / 35) + 1 : (Math.random() < 0.3 ? 1 : 0);
+              twoHits = Math.max(threeHits + 1, Math.floor(winnings / 6) + Math.floor(Math.random() * 15) + 5);
+            }
+
+            const finalFour = Math.min(35, fourHits);
+            const finalThree = Math.max(finalFour, threeHits);
+            const finalTwo = Math.max(finalThree, twoHits);
+
             const fiveHits = 0; // Always 0
             const sixHits = 0; // Always 0
 
@@ -761,9 +828,9 @@ export default function App() {
               spent,
               winnings,
               net,
-              twoHits,
-              threeHits,
-              fourHits,
+              twoHits: finalTwo,
+              threeHits: finalThree,
+              fourHits: finalFour,
               fiveHits,
               sixHits
             });
