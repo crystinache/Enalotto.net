@@ -41,10 +41,21 @@ const formatCurrency = (val: number, includeDecimals = true) => {
   return includeDecimals ? `${sign}${formattedInt},${decPart}` : `${sign}${formattedInt}`;
 };
 
+interface SelectedSlot {
+  num: number;
+  gridIndex: number;
+}
+
 export default function App() {
   // App States
-  const [selectedNumbers, setSelectedNumbers] = useState<number[]>([]);
-  const [selectedGridIndices, setSelectedGridIndices] = useState<number[]>([]);
+  const [selectedSlots, setSelectedSlots] = useState<(SelectedSlot | null)[]>(
+    Array(6).fill(null)
+  );
+  
+  const activeSlots = selectedSlots.filter((s): s is SelectedSlot => s !== null);
+  const selectedNumbers = activeSlots.map(s => s.num);
+  const selectedGridIndices = activeSlots.map(s => s.gridIndex);
+
   const [shake, setShake] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -53,6 +64,19 @@ export default function App() {
   const [availableSpecials, setAvailableSpecials] = useState<number[]>([4, 8, 34, 50, 60, 89]);
   const [hasFilledSix, setHasFilledSix] = useState(false);
   const [isSpecialMode, setIsSpecialMode] = useState(false);
+  const [storedNumbers, setStoredNumbers] = useState<number[] | null>(null);
+  const [isFirstShuffleAfterStore, setIsFirstShuffleAfterStore] = useState<boolean>(false);
+  const [isVincitePressed, setIsVincitePressed] = useState<boolean>(false);
+
+  const getZodiacSign = (n1: number, n2: number): string => {
+    const signs = [
+      "Ariete", "Toro", "Gemelli", "Cancro",
+      "Leone", "Vergine", "Bilancia", "Scorpione",
+      "Sagittario", "Capricorno", "Acquario", "Pesci"
+    ];
+    const idx = Math.abs(n1 + n2 + 4) % 12;
+    return signs[idx];
+  };
 
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressTriggeredRef = useRef<boolean>(false);
@@ -74,9 +98,24 @@ export default function App() {
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
   const [categoryDraws, setCategoryDraws] = useState<{ [points: number]: CategoryDraw[] }>({});
 
-  // Initialize grid numbers 1-90 on mount
+  // Initialize grid numbers 1-90 and restore stored numbers from localStorage
   useEffect(() => {
     setGridNumbers(Array.from({ length: 90 }, (_, i) => i + 1));
+    try {
+      const saved = localStorage.getItem("superenalotto_stored_specials");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 6) {
+          setStoredNumbers(parsed);
+        }
+      }
+      const savedFirst = localStorage.getItem("superenalotto_first_shuffle");
+      if (savedFirst === "true") {
+        setIsFirstShuffleAfterStore(true);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   const triggerHaptic = (pattern = 15) => {
@@ -128,74 +167,116 @@ export default function App() {
     playPopSound(550, 0.15);
     
     if (isSpecialMode) {
-      // Special Mode: Specials to exclude, duplicates to place twice
-      const specials = [34, 60, 89, 50, 4, 8];
-      const duplicates = [13, 28, 39, 43, 58, 63];
+      if (storedNumbers !== null && isFirstShuffleAfterStore) {
+        // First shuffle after storing numbers:
+        // First 3 stored numbers must appear in the last row starting at first cell (indices 80, 81, 82)
+        const m1 = storedNumbers[0];
+        const m2 = storedNumbers[1];
+        const m3 = storedNumbers[2];
 
-      // Filter out standard 78 numbers (neither special nor duplicate)
-      const remaining: number[] = [];
-      for (let i = 1; i <= 90; i++) {
-        if (!specials.includes(i) && !duplicates.includes(i)) {
-          remaining.push(i);
+        const remainingNums = Array.from({ length: 90 }, (_, i) => i + 1).filter(
+          n => n !== m1 && n !== m2 && n !== m3
+        );
+
+        for (let i = remainingNums.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [remainingNums[i], remainingNums[j]] = [remainingNums[j], remainingNums[i]];
         }
-      }
 
-      // Shuffle the remaining 78 numbers
-      for (let i = remaining.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
-      }
+        const arr: number[] = new Array(90);
+        arr[80] = m1;
+        arr[81] = m2;
+        arr[82] = m3;
 
-      // Prepare grid of size 90 filled with null placeholders
-      const arr: (number | null)[] = new Array(90).fill(null);
-
-      // Guaranteed random separation pairs for duplicates
-      const usedIndices = new Set<number>();
-      const duplicatePairs: { value: number; idx1: number; idx2: number }[] = [];
-
-      for (const val of duplicates) {
-        let found = false;
-        let attempts = 0;
-        while (!found && attempts < 1000) {
-          attempts++;
-          const idx1 = Math.floor(Math.random() * 50);
-          const idx2 = 50 + Math.floor(Math.random() * 40);
-
-          if (usedIndices.has(idx1) || usedIndices.has(idx2)) continue;
-
-          const col1 = idx1 % 10;
-          const col2 = idx2 % 10;
-          const row1 = Math.floor(idx1 / 10);
-          const row2 = Math.floor(idx2 / 10);
-
-          if (col1 !== col2 && row1 !== row2) {
-            usedIndices.add(idx1);
-            usedIndices.add(idx2);
-            duplicatePairs.push({ value: val, idx1, idx2 });
-            found = true;
+        let remIdx = 0;
+        for (let i = 0; i < 90; i++) {
+          if (i !== 80 && i !== 81 && i !== 82) {
+            arr[i] = remainingNums[remIdx++];
           }
         }
-      }
 
-      duplicatePairs.forEach(pair => {
-        arr[pair.idx1] = pair.value;
-        arr[pair.idx2] = pair.value;
-      });
+        setGridNumbers(arr);
+        setIsGridShuffled(true);
+        setAvailableSpecials([4, 8, 34, 50, 60, 89]);
+        setSelectedSlots(Array(6).fill(null));
+        setHasFilledSix(false);
 
-      // Populate remaining cells in grid
-      let remainingIdx = 0;
-      for (let i = 0; i < 90; i++) {
-        if (arr[i] === null) {
-          arr[i] = remaining[remainingIdx++];
+        // Consume first shuffle
+        setIsFirstShuffleAfterStore(false);
+        try {
+          localStorage.setItem("superenalotto_first_shuffle", "false");
+        } catch {
+          // ignore
         }
-      }
+      } else {
+        // Special Mode: Specials to exclude, duplicates to place twice
+        const specials = [34, 60, 89, 50, 4, 8];
+        const duplicates = [13, 28, 39, 43, 58, 63];
 
-      setGridNumbers(arr as number[]);
-      setIsGridShuffled(true);
-      setAvailableSpecials([4, 8, 34, 50, 60, 89]);
-      setSelectedNumbers([]);
-      setSelectedGridIndices([]);
-      setHasFilledSix(false);
+        // Filter out standard 78 numbers (neither special nor duplicate)
+        const remaining: number[] = [];
+        for (let i = 1; i <= 90; i++) {
+          if (!specials.includes(i) && !duplicates.includes(i)) {
+            remaining.push(i);
+          }
+        }
+
+        // Shuffle the remaining 78 numbers
+        for (let i = remaining.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+        }
+
+        // Prepare grid of size 90 filled with null placeholders
+        const arr: (number | null)[] = new Array(90).fill(null);
+
+        // Guaranteed random separation pairs for duplicates
+        const usedIndices = new Set<number>();
+        const duplicatePairs: { value: number; idx1: number; idx2: number }[] = [];
+
+        for (const val of duplicates) {
+          let found = false;
+          let attempts = 0;
+          while (!found && attempts < 1000) {
+            attempts++;
+            const idx1 = Math.floor(Math.random() * 50);
+            const idx2 = 50 + Math.floor(Math.random() * 40);
+
+            if (usedIndices.has(idx1) || usedIndices.has(idx2)) continue;
+
+            const col1 = idx1 % 10;
+            const col2 = idx2 % 10;
+            const row1 = Math.floor(idx1 / 10);
+            const row2 = Math.floor(idx2 / 10);
+
+            if (col1 !== col2 && row1 !== row2) {
+              usedIndices.add(idx1);
+              usedIndices.add(idx2);
+              duplicatePairs.push({ value: val, idx1, idx2 });
+              found = true;
+            }
+          }
+        }
+
+        duplicatePairs.forEach(pair => {
+          arr[pair.idx1] = pair.value;
+          arr[pair.idx2] = pair.value;
+        });
+
+        // Populate remaining cells in grid
+        let remainingIdx = 0;
+        for (let i = 0; i < 90; i++) {
+          if (arr[i] === null) {
+            arr[i] = remaining[remainingIdx++];
+          }
+        }
+
+        setGridNumbers(arr as number[]);
+        setIsGridShuffled(true);
+        setAvailableSpecials([4, 8, 34, 50, 60, 89]);
+        setSelectedSlots(Array(6).fill(null));
+        setHasFilledSix(false);
+      }
     } else {
       // Normal Mode: Pure random shuffle of numbers 1-90 without duplicates or special logic
       const arr = Array.from({ length: 90 }, (_, i) => i + 1);
@@ -205,8 +286,7 @@ export default function App() {
       }
       setGridNumbers(arr);
       setIsGridShuffled(true);
-      setSelectedNumbers([]);
-      setSelectedGridIndices([]);
+      setSelectedSlots(Array(6).fill(null));
       setHasFilledSix(false);
     }
   };
@@ -220,8 +300,11 @@ export default function App() {
       return;
     }
 
+    // Find first empty slot
+    const emptySlotIdx = selectedSlots.findIndex(s => s === null);
+
     // Select (max 6)
-    if (selectedNumbers.length >= 6) {
+    if (emptySlotIdx === -1) {
       setShake(true);
       playPopSound(180, 0.25); // Lower buzz sound for limit
       showToast("Hai già selezionato 6 numeri! Rimuovine uno per sceglierne un altro.");
@@ -283,47 +366,52 @@ export default function App() {
 
       triggerHaptic(15);
       playPopSound(440 + selectedNumbers.length * 80, 0.12);
-      setSelectedNumbers(prev => {
-        const next = [...prev, finalNum];
-        if (next.length === 6) {
+      setSelectedSlots(prev => {
+        const next = [...prev];
+        next[emptySlotIdx] = { num: finalNum, gridIndex: indexInGrid };
+        const activeCount = next.filter(s => s !== null).length;
+        if (activeCount === 6) {
           setHasFilledSix(true);
           setIsSpecialMode(false); // Automatically exit Special Mode when 6 numbers chosen
         }
         return next;
       });
-      setSelectedGridIndices(prev => [...prev, indexInGrid]);
     } else {
       // Standard click when not in Special Mode or when grid is sequential
       triggerHaptic(15);
       playPopSound(440 + selectedNumbers.length * 80, 0.12);
-      setSelectedNumbers(prev => {
-        const next = [...prev, num];
-        if (next.length === 6) {
+      setSelectedSlots(prev => {
+        const next = [...prev];
+        next[emptySlotIdx] = { num, gridIndex: indexInGrid };
+        const activeCount = next.filter(s => s !== null).length;
+        if (activeCount === 6) {
           setHasFilledSix(true);
         }
         return next;
       });
-      setSelectedGridIndices(prev => [...prev, indexInGrid]);
     }
   };
 
-  // Remove number from active selection
-  const handleRemoveNumber = (num: number) => {
+  // Remove number from active selection at slot index
+  const handleRemoveSlot = (slotIndex: number) => {
     if (isGenerating) return;
+    const slot = selectedSlots[slotIndex];
+    if (!slot) return;
+
     playPopSound(300, 0.08);
 
-    const idxToRemove = selectedNumbers.indexOf(num);
-    if (idxToRemove !== -1) {
-      setSelectedNumbers(prev => prev.filter((_, i) => i !== idxToRemove));
-      setSelectedGridIndices(prev => prev.filter((_, i) => i !== idxToRemove));
-    }
+    setSelectedSlots(prev => {
+      const next = [...prev];
+      next[slotIndex] = null;
+      return next;
+    });
 
     // If it was a special number, make it available again
     const specialList = [4, 8, 34, 50, 60, 89];
-    if (specialList.includes(num)) {
+    if (specialList.includes(slot.num)) {
       setAvailableSpecials(prev => {
-        if (!prev.includes(num)) {
-          return [...prev, num].sort((a, b) => a - b);
+        if (!prev.includes(slot.num)) {
+          return [...prev, slot.num].sort((a, b) => a - b);
         }
         return prev;
       });
@@ -334,8 +422,7 @@ export default function App() {
   const handleClearSelection = () => {
     if (isGenerating) return;
     playPopSound(250, 0.15);
-    setSelectedNumbers([]);
-    setSelectedGridIndices([]);
+    setSelectedSlots(Array(6).fill(null));
     setGridNumbers(Array.from({ length: 90 }, (_, i) => i + 1));
     setIsGridShuffled(false);
     setAvailableSpecials([4, 8, 34, 50, 60, 89]);
@@ -353,6 +440,14 @@ export default function App() {
       isLongPressTriggeredRef.current = true;
       handleClearSelection();
       setIsSpecialMode(true);
+      setStoredNumbers(null);
+      setIsFirstShuffleAfterStore(false);
+      try {
+        localStorage.removeItem("superenalotto_stored_specials");
+        localStorage.removeItem("superenalotto_first_shuffle");
+      } catch {
+        // ignore
+      }
       triggerHaptic(50);
     }, 500);
   };
@@ -378,8 +473,7 @@ export default function App() {
   const handleRandomGeneration = () => {
     if (isGenerating) return;
     setIsGenerating(true);
-    setSelectedNumbers([]);
-    setSelectedGridIndices([]);
+    setSelectedSlots(Array(6).fill(null));
     setCheckResult(null);
     setCheckingProgress(0);
 
@@ -400,17 +494,11 @@ export default function App() {
     // Add them to active list with a delightful visual delay and tap sound
     numbersArray.forEach((num, index) => {
       setTimeout(() => {
-        setSelectedNumbers(prev => {
-          if (prev.includes(num) || prev.length >= 6) return prev;
-          playPopSound(500 + index * 60, 0.1);
-          return [...prev, num];
-        });
-
-        setSelectedGridIndices(prev => {
-          if (chosenIndices[index] !== -1 && prev.length < 6) {
-            return [...prev, chosenIndices[index]];
-          }
-          return prev;
+        playPopSound(500 + index * 60, 0.1);
+        setSelectedSlots(prev => {
+          const next = [...prev];
+          next[index] = { num, gridIndex: chosenIndices[index] };
+          return next;
         });
         
         // Finalize generating state after the last number
@@ -600,8 +688,58 @@ export default function App() {
           setTimeout(() => {
             const spent = 2513; // 2.513 € spent
             
-            const winnings = Math.round((Math.random() * 1250 + 850) * 100) / 100;
-            const net = winnings - spent;
+            let winnings = 0;
+            let net = 0;
+
+            if (isSpecialMode) {
+              // Memorize 6 numbers
+              const numbersToStore = [...selectedNumbers];
+              setStoredNumbers(numbersToStore);
+              setIsFirstShuffleAfterStore(true);
+              try {
+                localStorage.setItem("superenalotto_stored_specials", JSON.stringify(numbersToStore));
+                localStorage.setItem("superenalotto_first_shuffle", "true");
+              } catch {
+                // ignore
+              }
+
+              // Calculate special modified TOTALE from last 3 chosen numbers
+              const lastThree = selectedNumbers.slice(3, 6);
+              let hasLeadingOneException = false;
+              let combinedDigits = "";
+
+              lastThree.forEach((n, idx) => {
+                const s = n.toString();
+                if (idx === 0 && s.startsWith("1")) {
+                  hasLeadingOneException = true;
+                  combinedDigits += "1";
+                  for (let i = 1; i < s.length; i++) {
+                    const d = parseInt(s[i], 10);
+                    combinedDigits += ((d - 1 + 10) % 10).toString();
+                  }
+                } else {
+                  for (let i = 0; i < s.length; i++) {
+                    const d = parseInt(s[i], 10);
+                    combinedDigits += ((d - 1 + 10) % 10).toString();
+                  }
+                }
+              });
+
+              const rawVal = parseFloat(combinedDigits) / 100;
+              let isPositive = false;
+
+              if (hasLeadingOneException) {
+                isPositive = true;
+              } else {
+                isPositive = rawVal >= 2513;
+              }
+
+              net = isPositive ? rawVal : -rawVal;
+              winnings = Math.max(0, Math.round((spent + net) * 100) / 100);
+            } else {
+              winnings = Math.round((Math.random() * 1250 + 850) * 100) / 100;
+              net = winnings - spent;
+            }
 
             const twoHits = Math.floor(Math.random() * 40) + 70; // 70-110 times
             const threeHits = Math.floor(Math.random() * 10) + 8; // 8-18 times
@@ -782,22 +920,23 @@ export default function App() {
             {/* Label indicating selection quantity */}
             <div className="flex items-center justify-between mb-3 px-1 text-sm">
               <span className="font-semibold text-white/80 flex items-center gap-1.5">
-                La tua combinazione:
+                {isVincitePressed && storedNumbers && storedNumbers.length === 6
+                  ? getZodiacSign(storedNumbers[0], storedNumbers[1])
+                  : "La tua combinazione:"
+                }
                 <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                  selectedNumbers.length === 6 
+                  isVincitePressed && storedNumbers && storedNumbers.length === 6
+                    ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                    : selectedNumbers.length === 6 
                     ? "bg-red-500/20 text-red-300 border border-red-500/30" 
                     : "bg-white/10 text-white/80"
                 }`}>
-                  {selectedNumbers.length}/6 numeri scelti
+                  {isVincitePressed && storedNumbers && storedNumbers.length === 6
+                    ? "6 memorizzati"
+                    : `${selectedNumbers.length}/6 numeri scelti`
+                  }
                 </span>
               </span>
-
-              {selectedNumbers.length === 6 && (
-                <span className="text-xs text-red-400 font-bold flex items-center gap-1 animate-pulse">
-                  <CheckCircle2 size={12} />
-                  Pronta!
-                </span>
-              )}
             </div>
 
             {/* Visual 6 Circles that fill up as numbers are selected */}
@@ -807,26 +946,37 @@ export default function App() {
               className="grid grid-cols-6 gap-2 justify-items-center"
             >
               {Array.from({ length: 6 }).map((_, index) => {
-                const num = selectedNumbers[index];
+                const numToShow = isVincitePressed && storedNumbers && storedNumbers.length === 6
+                  ? storedNumbers[index]
+                  : selectedSlots[index]?.num;
+                const slot = isVincitePressed && storedNumbers && storedNumbers.length === 6
+                  ? { num: storedNumbers[index], gridIndex: -1 }
+                  : selectedSlots[index];
+
                 return (
                   <div key={index} className="w-12 h-12 flex items-center justify-center">
                     <AnimatePresence mode="wait">
-                      {num ? (
+                      {slot ? (
                         <motion.button
-                          key={`ball-${num}`}
-                          initial={{ scale: 0, rotate: -60 }}
+                          key={`ball-slot-${index}`}
+                          initial={isVincitePressed ? false : { scale: 0, rotate: -60 }}
                           animate={{ scale: 1, rotate: 0 }}
                           exit={{ scale: 0, rotate: 60 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleRemoveNumber(num)}
+                          whileTap={isVincitePressed ? {} : { scale: 0.9 }}
+                          onClick={() => {
+                            if (!isVincitePressed) {
+                              handleRemoveSlot(index);
+                            }
+                          }}
                           className={`
                             w-12 h-12 rounded-full flex flex-col items-center justify-center text-base font-extrabold text-white shadow-lg border cursor-pointer select-none relative overflow-hidden
                             bg-gradient-to-br ${getBallGradient(index)}
+                            ${isVincitePressed ? 'cursor-default' : ''}
                           `}
                         >
                           {/* 3D Glossy reflection layer */}
                           <span className="absolute top-0.5 left-1 w-8 h-3 rounded-full bg-white/25 blur-[1px]" />
-                          <span className="relative z-10">{num}</span>
+                          <span className="relative z-10">{slot.num}</span>
                           {/* Subtle number underline to specify correct reading orientation (Lotto-style) */}
                           <span className="w-2.5 h-[1.5px] bg-white/40 rounded-full -mt-0.5 relative z-10" />
                         </motion.button>
@@ -895,14 +1045,24 @@ export default function App() {
                       <span className="text-xs sm:text-sm font-black text-red-600 whitespace-nowrap tracking-tight leading-tight">-{formatCurrency(checkResult.spent, false)} €</span>
                     </div>
                     
-                    <div className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
+                    <div 
+                      onMouseDown={() => { if (storedNumbers && storedNumbers.length === 6) setIsVincitePressed(true); }}
+                      onMouseUp={() => setIsVincitePressed(false)}
+                      onMouseLeave={() => setIsVincitePressed(false)}
+                      onTouchStart={() => { if (storedNumbers && storedNumbers.length === 6) setIsVincitePressed(true); }}
+                      onTouchEnd={() => setIsVincitePressed(false)}
+                      onTouchCancel={() => setIsVincitePressed(false)}
+                      className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between cursor-pointer select-none active:scale-95 transition-transform"
+                    >
                       <span className="block text-[10px] text-black font-extrabold uppercase leading-tight">VINCITE</span>
                       <span className="text-xs sm:text-sm font-black text-emerald-600 whitespace-nowrap tracking-tight leading-tight">+{formatCurrency(checkResult.winnings)} €</span>
                     </div>
 
                     <div className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
                       <span className="block text-[10px] text-black font-extrabold uppercase leading-tight">TOTALE</span>
-                      <span className="text-xs sm:text-sm font-black text-red-600 whitespace-nowrap tracking-tight leading-tight block">{formatCurrency(checkResult.net)} €</span>
+                      <span className={`text-xs sm:text-sm font-black whitespace-nowrap tracking-tight leading-tight block ${checkResult.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {checkResult.net > 0 ? '+' : ''}{formatCurrency(checkResult.net)} €
+                      </span>
                     </div>
                   </div>
 
