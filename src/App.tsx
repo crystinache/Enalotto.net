@@ -534,7 +534,7 @@ export default function App() {
     let count2026 = 0;
 
     for (let i = 0; i < countNeeded; i++) {
-      const extNum = Math.max(1, baseExtraction - (i * Math.floor(Math.random() * 12 + 8)) - Math.floor(Math.random() * 4));
+      const extNum = Math.floor(Math.random() * 158) + 1;
       baseExtraction = extNum;
 
       // Most draws in previous years (2011-2025). At most 2 draws in 2026.
@@ -570,16 +570,13 @@ export default function App() {
 
       let prize = 0;
       if (points === 2) {
-        prize = Math.round((Math.random() * 6 + 4) * 100) / 100; // 4 to 10 €
+        prize = Math.round((Math.random() * 4 + 5) * 100) / 100; // 5 to 9 € (~7 € average)
       } else if (points === 3) {
-        // 20 to 100 €; if winnings > 3000, closer to max (70 to 100 €)
-        const minP = totalWinnings > 3000 ? 70 : 20;
-        const rangeP = totalWinnings > 3000 ? 30 : 80;
-        prize = Math.round((Math.random() * rangeP + minP) * 100) / 100;
+        prize = Math.round((Math.random() * 10 + 55) * 100) / 100; // 55 to 65 € (~60 € average)
       } else if (points === 4) {
-        // 300 to 800 €; if winnings > 3000, closer to max (650 to 800 €)
-        const minP = totalWinnings > 3000 ? 650 : 300;
-        const rangeP = totalWinnings > 3000 ? 150 : 500;
+        // 300 to 800 €; calibrated closer to user examples (~400 to 580 €)
+        const minP = 350;
+        const rangeP = 400; 
         prize = Math.round((Math.random() * rangeP + minP) * 100) / 100;
       } else if (points === 5) {
         prize = Math.round((Math.random() * 15000 + 10000) * 100) / 100;
@@ -794,30 +791,28 @@ export default function App() {
             let threeHits = 0;
             let twoHits = 0;
 
-            if (winnings > 3000) {
-              fourHits = Math.floor(winnings / 550) + Math.floor(Math.random() * 5) + 1;
-              fourHits = Math.min(35, fourHits);
-
-              const rem1 = Math.max(0, winnings - (fourHits * 720));
-              threeHits = fourHits + Math.floor(rem1 / 85) + Math.floor(Math.random() * 10) + 3;
-
-              const rem2 = Math.max(0, rem1 - (threeHits * 90));
-              twoHits = threeHits + Math.floor(rem2 / 7) + Math.floor(Math.random() * 15) + 5;
+            if (winnings >= 6000) {
+              // Tier >= 6000 €: ~75% 2N (~7€), ~22% 3N (~60€), ~3% 4N (~540€)
+              fourHits = Math.round(winnings / 1200) + (Math.random() < 0.4 ? 1 : 0);
+              threeHits = Math.round(winnings / 160) + (Math.random() < 0.5 ? 1 : 0);
+              twoHits = Math.round(winnings / 46) + (Math.random() < 0.5 ? 2 : -1);
             } else if (winnings > 300) {
-              fourHits = Math.min(20, Math.floor(winnings / 450) + (Math.random() < 0.2 ? 1 : 0));
-              threeHits = Math.max(fourHits, Math.floor(winnings / 50) + Math.floor(Math.random() * 8) + 3);
-              twoHits = Math.max(threeHits + 2, Math.floor(winnings / 7) + Math.floor(Math.random() * 30) + 15);
+              // Mix Standard: ~70% 2N (7€), ~20% 3N (60€), ~10% 4N (~450-580€)
+              // Based on user benchmarks (500€->5,1,1; 1500€->14,4,2; 2500€->24,7,4; 3500€->34,10,5; 4500€->44,13,6; 5500€->54,15,8)
+              fourHits = Math.round(winnings / 700) + (Math.random() < 0.3 ? 1 : 0);
+              threeHits = Math.round(winnings / 350) + (Math.random() < 0.4 ? 1 : 0);
+              twoHits = Math.round(winnings / 100) + (Math.random() < 0.5 ? 1 : -1);
             } else if (winnings > 150) {
               fourHits = Math.random() < 0.4 ? 1 : 0;
-              threeHits = Math.max(fourHits, Math.floor(winnings / 40) + Math.floor(Math.random() * 6) + 2);
-              twoHits = Math.max(threeHits + 2, Math.floor(winnings / 6) + Math.floor(Math.random() * 20) + 10);
+              threeHits = Math.max(1, Math.floor(winnings / 50));
+              twoHits = Math.max(2, Math.floor(winnings / 7));
             } else {
               fourHits = 0;
-              threeHits = winnings > 25 ? Math.floor(winnings / 35) + 1 : (Math.random() < 0.3 ? 1 : 0);
-              twoHits = Math.max(threeHits + 1, Math.floor(winnings / 6) + Math.floor(Math.random() * 15) + 5);
+              threeHits = winnings > 25 ? Math.floor(winnings / 60) : 0;
+              twoHits = Math.max(1, Math.floor(winnings / 7));
             }
 
-            const finalFour = Math.min(35, fourHits);
+            const finalFour = Math.max(0, fourHits);
             const finalThree = Math.max(finalFour, threeHits);
             const finalTwo = Math.max(finalThree, twoHits);
 
