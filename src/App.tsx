@@ -46,6 +46,43 @@ interface SelectedSlot {
   gridIndex: number;
 }
 
+const allocatePrizes = (winnings: number, n2: number, n3: number, n4: number) => {
+  let prizes2: number[] = Array(n2).fill(4);
+  let prizes3: number[] = Array(n3).fill(20);
+  let prizes4: number[] = Array(n4).fill(300);
+
+  const minSum = n2 * 4 + n3 * 20 + n4 * 300;
+  const maxSum = n2 * 10 + n3 * 100 + n4 * 800;
+  const targetWinnings = Math.max(minSum, Math.min(maxSum, winnings));
+  let surplus = Math.round((targetWinnings - minSum) * 100) / 100;
+
+  let allPrizes = [
+    ...prizes2.map((_, i) => ({ type: 2, index: i, val: 4, min: 4, max: 10 })),
+    ...prizes3.map((_, i) => ({ type: 3, index: i, val: 20, min: 20, max: 100 })),
+    ...prizes4.map((_, i) => ({ type: 4, index: i, val: 300, min: 300, max: 800 }))
+  ];
+
+  let iterations = 0;
+  while (surplus > 0.01 && iterations < 2000) {
+    iterations++;
+    const available = allPrizes.filter(p => p.val < p.max);
+    if (available.length === 0) break;
+    const item = available[Math.floor(Math.random() * available.length)];
+    const room = item.max - item.val;
+    const step = item.type === 4 ? Math.random() * 50 + 10 : (item.type === 3 ? Math.random() * 10 + 2 : Math.random() * 1 + 0.5);
+    const add = Math.min(surplus, room, Math.round(step * 100) / 100);
+    if (add <= 0) break;
+    item.val = Math.round((item.val + add) * 100) / 100;
+    surplus = Math.round((surplus - add) * 100) / 100;
+  }
+
+  prizes2 = allPrizes.filter(p => p.type === 2).map(p => p.val);
+  prizes3 = allPrizes.filter(p => p.type === 3).map(p => p.val);
+  prizes4 = allPrizes.filter(p => p.type === 4).map(p => p.val);
+
+  return { prizes2, prizes3, prizes4 };
+};
+
 export default function App() {
   // App States
   const [selectedSlots, setSelectedSlots] = useState<(SelectedSlot | null)[]>(
@@ -101,6 +138,9 @@ export default function App() {
     fourHits: number;
     fiveHits: number;
     sixHits: number;
+    prizes2?: number[];
+    prizes3?: number[];
+    prizes4?: number[];
   } | null>(null);
 
   const [expandedCategory, setExpandedCategory] = useState<number | null>(null);
@@ -569,15 +609,13 @@ export default function App() {
       const drawn = [...matched, ...unmatched].sort((a, b) => a - b);
 
       let prize = 0;
+      const prizeIdx = currentCount + i;
       if (points === 2) {
-        prize = Math.round((Math.random() * 4 + 5) * 100) / 100; // 5 to 9 € (~7 € average)
+        prize = checkResult?.prizes2?.[prizeIdx] ?? Math.round((Math.random() * 6 + 4) * 100) / 100;
       } else if (points === 3) {
-        prize = Math.round((Math.random() * 10 + 55) * 100) / 100; // 55 to 65 € (~60 € average)
+        prize = checkResult?.prizes3?.[prizeIdx] ?? Math.round((Math.random() * 80 + 20) * 100) / 100;
       } else if (points === 4) {
-        // 300 to 800 €; calibrated closer to user examples (~400 to 580 €)
-        const minP = 350;
-        const rangeP = 400; 
-        prize = Math.round((Math.random() * rangeP + minP) * 100) / 100;
+        prize = checkResult?.prizes4?.[prizeIdx] ?? Math.round((Math.random() * 500 + 300) * 100) / 100;
       } else if (points === 5) {
         prize = Math.round((Math.random() * 15000 + 10000) * 100) / 100;
       } else if (points === 6) {
@@ -796,10 +834,19 @@ export default function App() {
             const benchmarkThree = [4, 11, 18, 25, 32, 40, 47, 54, 62];
             const benchmarkFour = [1, 1, 2, 2, 3, 4, 5, 6, 7];
 
-            if (winnings <= 500) {
-              twoHits = 13;
-              threeHits = 4;
-              fourHits = 1;
+            if (winnings <= 50) {
+              twoHits = Math.max(1, Math.round(winnings / 7));
+              threeHits = 0;
+              fourHits = 0;
+            } else if (winnings <= 350) {
+              twoHits = Math.round(4 + ((winnings - 50) / 300) * 5);
+              threeHits = Math.round(1 + ((winnings - 50) / 300) * 2);
+              fourHits = 0;
+            } else if (winnings < 500) {
+              const t = (winnings - 350) / 150;
+              twoHits = Math.round(9 + t * 4);
+              threeHits = Math.round(3 + t * 1);
+              fourHits = t > 0.7 ? 1 : 0;
             } else if (winnings >= 8500) {
               twoHits = 227 + Math.round((winnings - 8500) * 0.027);
               threeHits = 62 + Math.round((winnings - 8500) * 0.008);
@@ -825,6 +872,8 @@ export default function App() {
             const fiveHits = 0; // Always 0
             const sixHits = 0; // Always 0
 
+            const allocated = allocatePrizes(winnings, finalTwo, finalThree, finalFour);
+
             setCheckResult({
               spent,
               winnings,
@@ -833,7 +882,10 @@ export default function App() {
               threeHits: finalThree,
               fourHits: finalFour,
               fiveHits,
-              sixHits
+              sixHits,
+              prizes2: allocated.prizes2,
+              prizes3: allocated.prizes3,
+              prizes4: allocated.prizes4
             });
             setIsChecking(false);
             playPopSound(800, 0.25);
