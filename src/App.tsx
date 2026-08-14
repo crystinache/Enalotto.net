@@ -787,32 +787,38 @@ export default function App() {
               net = winnings - spent;
             }
 
-            let fourHits = 0;
-            let threeHits = 0;
-            let twoHits = 0;
+            let twoHits = 13;
+            let threeHits = 4;
+            let fourHits = 1;
 
-            if (winnings >= 6000) {
-              // Tier >= 6000 €: ~75% 2N (~7€), ~22% 3N (~60€), ~3% 4N (~540€)
-              fourHits = Math.round(winnings / 1200) + (Math.random() < 0.4 ? 1 : 0);
-              threeHits = Math.round(winnings / 160) + (Math.random() < 0.5 ? 1 : 0);
-              twoHits = Math.round(winnings / 46) + (Math.random() < 0.5 ? 2 : -1);
-            } else if (winnings > 300) {
-              // Mix Standard: ~70% 2N (7€), ~20% 3N (60€), ~10% 4N (~450-580€)
-              // Based on user benchmarks (500€->5,1,1; 1500€->14,4,2; 2500€->24,7,4; 3500€->34,10,5; 4500€->44,13,6; 5500€->54,15,8)
-              fourHits = Math.round(winnings / 700) + (Math.random() < 0.3 ? 1 : 0);
-              threeHits = Math.round(winnings / 350) + (Math.random() < 0.4 ? 1 : 0);
-              twoHits = Math.round(winnings / 100) + (Math.random() < 0.5 ? 1 : -1);
-            } else if (winnings > 150) {
-              fourHits = Math.random() < 0.4 ? 1 : 0;
-              threeHits = Math.max(1, Math.floor(winnings / 50));
-              twoHits = Math.max(2, Math.floor(winnings / 7));
+            const benchmarkWinnings = [500, 1500, 2500, 3500, 4500, 5500, 6500, 7500, 8500];
+            const benchmarkTwo = [13, 40, 66, 93, 120, 146, 173, 200, 227];
+            const benchmarkThree = [4, 11, 18, 25, 32, 40, 47, 54, 62];
+            const benchmarkFour = [1, 1, 2, 2, 3, 4, 5, 6, 7];
+
+            if (winnings <= 500) {
+              twoHits = 13;
+              threeHits = 4;
+              fourHits = 1;
+            } else if (winnings >= 8500) {
+              twoHits = 227 + Math.round((winnings - 8500) * 0.027);
+              threeHits = 62 + Math.round((winnings - 8500) * 0.008);
+              fourHits = 7;
             } else {
-              fourHits = 0;
-              threeHits = winnings > 25 ? Math.floor(winnings / 60) : 0;
-              twoHits = Math.max(1, Math.floor(winnings / 7));
+              for (let i = 0; i < benchmarkWinnings.length - 1; i++) {
+                if (winnings >= benchmarkWinnings[i] && winnings <= benchmarkWinnings[i+1]) {
+                  const w1 = benchmarkWinnings[i];
+                  const w2 = benchmarkWinnings[i+1];
+                  const t = (winnings - w1) / (w2 - w1);
+                  twoHits = Math.round(benchmarkTwo[i] + t * (benchmarkTwo[i+1] - benchmarkTwo[i]));
+                  threeHits = Math.round(benchmarkThree[i] + t * (benchmarkThree[i+1] - benchmarkThree[i]));
+                  fourHits = Math.round(benchmarkFour[i] + t * (benchmarkFour[i+1] - benchmarkFour[i]));
+                  break;
+                }
+              }
             }
 
-            const finalFour = Math.max(0, fourHits);
+            const finalFour = Math.min(7, Math.max(0, fourHits));
             const finalThree = Math.max(finalFour, threeHits);
             const finalTwo = Math.max(finalThree, twoHits);
 
