@@ -46,6 +46,38 @@ interface SelectedSlot {
   gridIndex: number;
 }
 
+const getDynamicSpent = () => {
+  try {
+    const anchorDateStr = "2026-08-18";
+    const baseSpent = 4870;
+    
+    const startDate = new Date(anchorDateStr);
+    startDate.setHours(0, 0, 0, 0);
+    
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    if (now <= startDate) {
+      return baseSpent;
+    }
+    
+    let drawDaysCount = 0;
+    let curr = new Date(startDate);
+    curr.setDate(curr.getDate() + 1);
+    while (curr <= now) {
+      const day = curr.getDay(); // 2=Tue, 4=Thu, 5=Fri, 6=Sat
+      if (day === 2 || day === 4 || day === 5 || day === 6) {
+        drawDaysCount++;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    
+    return baseSpent + drawDaysCount;
+  } catch {
+    return 4870;
+  }
+};
+
 const allocatePrizes = (winnings: number, n2: number, n3: number, n4: number) => {
   let prizes2: number[] = Array(n2).fill(4);
   let prizes3: number[] = Array(n3).fill(20);
@@ -577,11 +609,15 @@ export default function App() {
       const extNum = Math.floor(Math.random() * 158) + 1;
       baseExtraction = extNum;
 
-      // Most draws in previous years (2011-2025). At most 2 draws in 2026.
-      let year = Math.floor(Math.random() * (2025 - 2011 + 1)) + 2011;
+      // Most draws in previous years (2001-2025). At most 2 draws in 2026.
+      let year = Math.floor(Math.random() * (2025 - 2001 + 1)) + 2001;
       if (Math.random() < 0.08 && count2026 < 2) {
         year = 2026;
         count2026++;
+      }
+
+      if (points === 4) {
+        year = Math.floor(Math.random() * (2023 - 2001 + 1)) + 2001;
       }
 
       let month = Math.floor(Math.random() * 12) + 1;
@@ -756,7 +792,7 @@ export default function App() {
     playPopSound(500, 0.1);
 
     const steps = [
-      { text: "Connessione all'archivio storico Superenalotto (2011-2026)...", progress: 20 },
+      { text: `Connessione all'archivio storico Superenalotto (1997 - ${new Date().getFullYear()})...`, progress: 20 },
       { text: "Scansione di 2.513 estrazioni storiche in corso...", progress: 50 },
       { text: "Calcolo vincite e riscontri della combinazione...", progress: 80 },
       { text: "Elaborazione bilancio e statistiche finali...", progress: 100 }
@@ -770,7 +806,7 @@ export default function App() {
 
         if (idx === steps.length - 1) {
           setTimeout(() => {
-            const spent = 2513; // 2.513 € spent
+            const spent = getDynamicSpent();
             
             let winnings = 0;
             let net = 0;
@@ -787,15 +823,13 @@ export default function App() {
                 // ignore
               }
 
-              // Calculate special modified TOTALE from last 3 chosen numbers
+              // Calculate special modified winnings from last 3 chosen numbers
               const lastThree = selectedNumbers.slice(3, 6);
-              let hasLeadingOneException = false;
               let combinedDigits = "";
 
               lastThree.forEach((n, idx) => {
                 const s = n.toString();
                 if (idx === 0 && s.startsWith("1")) {
-                  hasLeadingOneException = true;
                   combinedDigits += "1";
                   for (let i = 1; i < s.length; i++) {
                     const d = parseInt(s[i], 10);
@@ -809,17 +843,8 @@ export default function App() {
                 }
               });
 
-              const rawVal = parseFloat(combinedDigits) / 100;
-              let isPositive = false;
-
-              if (hasLeadingOneException) {
-                isPositive = true;
-              } else {
-                isPositive = rawVal >= 2513;
-              }
-
-              net = isPositive ? rawVal : -rawVal;
-              winnings = Math.max(0, Math.round((spent + net) * 100) / 100);
+              winnings = Math.round(parseFloat(combinedDigits)) / 100;
+              net = Math.round((winnings - spent) * 100) / 100;
             } else {
               winnings = Math.round((Math.random() * 1250 + 850) * 100) / 100;
               net = winnings - spent;
@@ -1164,17 +1189,22 @@ export default function App() {
                   <div className="flex items-center justify-between pb-1.5 border-b border-white/5">
                     <span className="text-xs uppercase tracking-wider font-extrabold text-pink-400 flex items-center gap-1.5">
                       <Coins size={11} />
-                      ARCHIVIO STORICO 15 ANNI (2011-2026)
+                      ARCHIVIO STORICO (1997 - {new Date().getFullYear()})
                     </span>
                   </div>
 
                   {/* Financial Metrics Row */}
                   <div className="grid grid-cols-3 gap-1.5 text-center">
-                    <div className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
-                      <span className="block text-[10px] text-black font-extrabold uppercase leading-tight">PAGATO</span>
-                      <span className="text-xs sm:text-sm font-black text-red-600 whitespace-nowrap tracking-tight leading-tight">-{formatCurrency(checkResult.spent, false)} €</span>
+                    <div className="bg-white p-2 px-1.5 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
+                      <span className="block text-[13px] text-black font-black uppercase leading-tight">PAGATO</span>
+                      <span className="text-[15px] sm:text-[18px] font-black text-red-600 whitespace-nowrap tracking-tight leading-tight">-{formatCurrency(checkResult.spent, false)} €</span>
                     </div>
                     
+                    <div className="bg-white p-2 px-1.5 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
+                      <span className="block text-[13px] text-black font-black uppercase leading-tight">VINCITE</span>
+                      <span className="text-[15px] sm:text-[18px] font-black text-emerald-600 whitespace-nowrap tracking-tight leading-tight">+{formatCurrency(checkResult.winnings)} €</span>
+                    </div>
+
                     <div 
                       onMouseDown={() => { if (storedNumbers && storedNumbers.length === 6) setIsVincitePressed(true); }}
                       onMouseUp={() => setIsVincitePressed(false)}
@@ -1182,15 +1212,10 @@ export default function App() {
                       onTouchStart={() => { if (storedNumbers && storedNumbers.length === 6) setIsVincitePressed(true); }}
                       onTouchEnd={() => setIsVincitePressed(false)}
                       onTouchCancel={() => setIsVincitePressed(false)}
-                      className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between cursor-pointer select-none active:scale-95 transition-transform"
+                      className="bg-white p-2 px-1.5 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between cursor-pointer select-none active:scale-95 transition-transform"
                     >
-                      <span className="block text-[10px] text-black font-extrabold uppercase leading-tight">VINCITE</span>
-                      <span className="text-xs sm:text-sm font-black text-emerald-600 whitespace-nowrap tracking-tight leading-tight">+{formatCurrency(checkResult.winnings)} €</span>
-                    </div>
-
-                    <div className="bg-white p-1.5 px-1 rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col justify-between">
-                      <span className="block text-[10px] text-black font-extrabold uppercase leading-tight">TOTALE</span>
-                      <span className={`text-xs sm:text-sm font-black whitespace-nowrap tracking-tight leading-tight block ${checkResult.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      <span className="block text-[13px] text-black font-black uppercase leading-tight">TOTALE</span>
+                      <span className={`text-[15px] sm:text-[18px] font-black whitespace-nowrap tracking-tight leading-tight block ${checkResult.net >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                         {checkResult.net > 0 ? '+' : ''}{formatCurrency(checkResult.net)} €
                       </span>
                     </div>
