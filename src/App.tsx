@@ -1336,7 +1336,7 @@ export default function App() {
 
               {!isChecking && !checkResult && (
                 <div className="border border-dashed border-white/10 rounded-2xl py-6 px-4 text-center text-sm text-white/50 bg-white/5 shadow-sm">
-                  <p className="font-bold mb-1 text-white/90">Verifica statistica degli ultimi 15 anni</p>
+                  <p className="font-bold mb-1 text-white/90">Ricerca estrazione nell'archivio storico ufficiale</p>
                   <p className="text-xs mt-1 text-white/40 leading-relaxed">Seleziona 6 numeri e premi Controlla i miei numeri per scoprire se hai vinto dei premi.</p>
                 </div>
               )}
